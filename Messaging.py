@@ -16,4 +16,4 @@ router = Router()
 
 @router.message(CommandStart())
 async def startHandler(msg: Message):
-    await msg.answer(**Text(greeting.format(msg.from_user.full_name)).as_kwargs()) # type: ignore
+    await msg.answer(**Text(greeting.format(msg.from_user.username)).as_kwargs()) # type: ignore

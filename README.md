@@ -11,7 +11,8 @@ _Launch flow_:
 1. Install python 3.13.9+
 2. Install uv 0.10.8+
 3. Create separate virtual environment using `uv venv`
-4. Run `python -m ensurepip` (from now on, use `python -m pip`... for any lib manipulations)
-5. Run `python -m pip install --upgrade pip`
-6. Install all the libs needed using `python -m pip install requirements.txt`
-7. Run the bot using `python main.py`
+4. Run `source ./venv/bin/activate`
+5. Run `python -m ensurepip` (from now on, use `python -m pip`... for any lib manipulations)
+6. Run `python -m pip install --upgrade pip`
+7. Install all the libs needed using `python -m pip install requirements.txt`
+8. Run the bot using `python main.py`
