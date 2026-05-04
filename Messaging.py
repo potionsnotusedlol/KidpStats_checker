@@ -11,6 +11,7 @@ from aiogram.types import Message
 from aiogram.filters import Command, CommandStart
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.utils.formatting import Text
+import StudentDataHandler as sdh
 
 router = Router()
 
