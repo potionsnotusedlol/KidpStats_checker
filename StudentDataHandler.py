@@ -1,21 +1,22 @@
 from enum import IntEnum
 from functools import wraps
+from Config import config
+from aiogram.types import Message
 
 import aiosqlite
+import re
 
-async def initDB(path_to_database):
-    async with aiosqlite.connect(path_to_database) as role_database:
-        await role_database.execute("""
-        CREATE TABLE IF NOT EXISTS Users (
-            id TEXT PRIMARY KEY,
-            fullname TEXT NOT NULL
-        )
-        """)
-        await role_database.commit()
+roles_db_path = config.ROLES_DB_PATH.get_secret_value()
 
-# region roles handling
-async def getUserRole(user_id, path_to_database):
-    async with aiosqlite.connect(path_to_database) as role_database:
+class Role(IntEnum):
+    GUEST = 0
+    STUDENT = 1
+    ADMIN = 2
+    OWNER = 3
+
+# region DB handling
+async def getUserRole(user_id) -> Role:
+    async with aiosqlite.connect(roles_db_path) as role_database:
         async with role_database.execute("""
         SELECT 1
         FROM Users
@@ -29,26 +30,38 @@ async def getUserRole(user_id, path_to_database):
     # a little bit of shitty if's in here))
     if role is not None:
         if role == "owner":
-            return 3
+            return Role.OWNER
         elif role == "admin":
-            return 2
+            return Role.ADMIN
         elif role != "admin" and role != "owner":
-            return 1
-    else:
-        return 0    
+            return Role.STUDENT
+        
+    return Role.GUEST
 # endregion
 
 # region RBAC implementation
-class Role(IntEnum):
-    GUEST = 0
-    STUDENT = 1
-    ADMIN = 2
-    OWNER = 3
 
-def requireAcess(role: Role):
+def requireAcess(req_role: Role):
     def decorator(func):
         @wraps(func)
-        async def wrapper():
-            pass
+        async def wrapper(msg: Message):
+            uid = msg.from_user.username # type: ignore
+            role = await getUserRole(uid)
+
+            if role < req_role:
+                return
+            
+            return await func(msg)
+        return wrapper
+    return decorator
+
+class Request(IntEnum):
+    UPDATE_ROLES_DB = 0
+    UPDATE_DATA_DB = 1
+
+def SDH(request: Request, uid: str):
+    if request == Request.UPDATE_ROLES_DB:
+
+            
 
 # endregion
