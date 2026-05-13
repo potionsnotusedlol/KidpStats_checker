@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     BOT_TOKEN: SecretStr
     ROLES_DB_PATH: SecretStr
     ROLES_FILE_PATH: SecretStr
+    OWNER_USERNAME: SecretStr
     
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 

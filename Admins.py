@@ -1,10 +1,10 @@
 from aiogram import Router
-from aiogram.filters import Command
+from aiogram.filters import CommandStart
 from aiogram.types import Message
 from aiogram.utils.formatting import Text
 from StudentDataHandler import Role, requireAcess, getUserRole
 
-import KB
+from KB import admin_main_menu
 
 # region messages
 greeting = """
@@ -19,11 +19,9 @@ main_menu = """
 """
 # endregion
 router = Router()
-role = 0
 
 @requireAcess(Role.ADMIN)
-@router.message(Command("start"))
+@router.message(CommandStart)
 async def greet(msg: Message):
     await msg.answer(**Text(greeting).as_kwargs())
-
-    await msg.answer(main_menu, reply_markup=KB.admin_main_menu)
+    await msg.answer(main_menu, reply_markup=admin_main_menu.as_markup())

@@ -29,18 +29,18 @@ async def getUserRole(user_id) -> Role:
 
     # a little bit of shitty if's in here))
     if role is not None:
-        if role == "owner":
-            return Role.OWNER
-        elif role == "admin":
+        if role == "admin":
             return Role.ADMIN
         elif role != "admin" and role != "owner":
             return Role.STUDENT
+    
+    if role == config.OWNER_USERNAME.get_secret_value():
+        return Role.OWNER
         
     return Role.GUEST
 # endregion
 
 # region RBAC implementation
-
 def requireAcess(req_role: Role):
     def decorator(func):
         @wraps(func)
@@ -61,7 +61,5 @@ class Request(IntEnum):
 
 def SDH(request: Request, uid: str):
     if request == Request.UPDATE_ROLES_DB:
-
-            
-
+        pass
 # endregion
