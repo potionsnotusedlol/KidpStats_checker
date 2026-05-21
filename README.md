@@ -4,14 +4,26 @@ The bot features a greeting message at this point.
 
 Best way to launch the bot is using `uv`
 
-_Launch flow_:
+## _Launch flow_:
 
 **assuming the repo been cloned successfully and all the secret keys are in .env**
 
 1. Install python 3.13.9+
 2. Install uv 0.10.8+
 3. Create separate virtual environment using `uv venv`
-4. Run `python -m ensurepip` (from now on, use `python -m pip`... for any lib manipulations)
-5. Run `python -m pip install --upgrade pip`
-6. Install all the libs needed using `python -m pip install requirements.txt`
-7. Run the bot using `python main.py`
+4. Run `source ./venv/bin/activate`
+5. Run `python -m ensurepip` (from now on, use `python -m pip`... for any lib manipulations)
+6. Run `python -m pip install --upgrade pip`
+7. Install all the libs needed using `python -m pip install requirements.txt`
+8. Run the bot using `python main.py`
+
+## RBAC
+
+The Role-Based Access Control is implemented using standart procedures and methods.
+
+The roles are:
+
+0. Guest (Triggers a warning that this bot is not accessible)
+1. Student (Read-only)
+2. Admin (with all the fancy stuff customizable and file ops)
+3. Owner (Has the ability to give an user and Admin or Student role)
