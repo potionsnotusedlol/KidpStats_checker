@@ -24,13 +24,14 @@ class InitMiddleware(BaseMiddleware):
             return Role.OWNER
     
         async with aiosqlite.connect(ROLES_DB_PATH) as role_database:
-            async with role_database.execute("""
-            SELECT fullname
-            FROM Users
-            WHERE telegram_ID = ?
-            LIMIT 1
-            """,
-            (user_id,)
+            async with role_database.execute(
+                """
+                    SELECT fullname
+                    FROM Users
+                    WHERE telegram_ID = ?
+                    LIMIT 1
+                """,
+                (user_id,)
             ) as cursor:
                 role = await cursor.fetchone()
 
