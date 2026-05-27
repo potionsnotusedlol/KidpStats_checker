@@ -10,7 +10,7 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.client import default
 from Config import config
 from Middlewares import InitMiddleware
-from StudentDataHandler import getUsersDB
+from StudentDataHandler import getUsersDB, fetchInfoFile, INFO_FILE_PATH
 
 pm_options = { ParseMode.MARKDOWN_V2: "MARKDOWN_V2" }
 
@@ -22,6 +22,7 @@ async def main():
     dp.include_routers(Admins.router, Students.router, Guests.router)
 
     await getUsersDB()
+    # await fetchInfoFile(INFO_FILE_PATH)
     await bot.delete_webhook(drop_pending_updates=True)
     await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
 
