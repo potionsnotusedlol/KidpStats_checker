@@ -7,10 +7,12 @@ import asyncio
 
 ROLES_FILE_PATH = config.STORAGE_FOLDER.get_secret_value() + config.ROLES_FILENAME.get_secret_value()
 ROLES_DB_PATH = config.STORAGE_FOLDER.get_secret_value() + config.ROLES_DB_NAME.get_secret_value()
-loop = asyncio.get_event_loop()
+INFO_FILE_PATH = config.STORAGE_FOLDER.get_secret_value() + config.INFO_FILENAME.get_secret_value()
+INFO_DB_PATH = config.STORAGE_FOLDER.get_secret_value() + config.INFO_DB_NAME.get_secret_value()
 
 # region DB handling
 async def getUsersDB():
+    loop = asyncio.get_event_loop()
     workbook = await loop.run_in_executor(None, lambda: load_workbook(filename=ROLES_FILE_PATH, read_only=True))
     roles_file = workbook.active
     rows = []
@@ -50,13 +52,17 @@ async def updateInfoFile():
     pass
 
 async def fetchInfoFile(filename):
-    wb = await loop.run_in_executor(None, lambda: load_workbook(filename=filename, read_only=True))
+    loop = asyncio.get_event_loop()
+    wb = await loop.run_in_executor(None, lambda: load_workbook(filename, read_only=True))
 
     for sheet in wb.worksheets:
-        async with aiosqlite.connect("info.db") as info_db:
+        table_name = filename[50:-5] + "_" + sheet.title # change the filename's slice later
+        table_name = table_name.replace("-", "_")
+
+        async with aiosqlite.connect(INFO_DB_PATH) as info_db:
             await info_db.execute(
-                """"
-                    CREATE TABLE IF NOT EXISTS ?_?(
+                """
+                    CREATE TABLE IF NOT EXISTS {}(
                         student_fullname TEXT PRIMARY KEY,
                         pptx TEXT,
                         docx TEXT,
@@ -83,13 +89,30 @@ async def fetchInfoFile(filename):
                         supervisor TEXT,
                         consultant TEXT
                     )
-                """,
-                (filename[21:-5], sheet.title)
+                """.format(table_name),
             )
+            await info_db.commit()
+        
+            rows = []
 
-    
+            for row in sheet.iter_rows(min_row=2):
+                data = tuple()
 
-    
+                for item in row:
+                    data += (item.value,)
+            
+                rows.append(data)
+        
+            await info_db.executemany(
+                f"""
+                    INSERT OR REPLACE INTO {table_name}
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                rows
+            )
+            await info_db.commit()
+
+
 
 # endregion
 
@@ -97,7 +120,7 @@ class Request(IntEnum):
     UPDATE_ROLES_DB = 0
     UPDATE_DATA_DB = 1
 
-async def SDH(request: Request, uid: str):
+async def SDH(request: Request):
     if request == Request.UPDATE_ROLES_DB:
         await getUsersDB()
     elif request == Request.UPDATE_DATA_DB:
