@@ -16,7 +16,6 @@ ADMIN_MAIN_MENU_LAYOUT = [
 ADMIN_MAIN_MENU = InlineKeyboardMarkup(inline_keyboard=ADMIN_MAIN_MENU_LAYOUT)
 RETURN_HOME_LAYOUT = [[InlineKeyboardButton(text="В главное меню🚀", callback_data="menus")]]
 RETURN_HOME = InlineKeyboardMarkup(inline_keyboard=RETURN_HOME_LAYOUT)
-# SETUP_NOTIFICATIONS_MENU = InlineKeyboardBuilder()
 WEEKDAYS = {
     "monday": "Понедельник ",
     "tuesday": "Вторник ",
@@ -26,6 +25,10 @@ WEEKDAYS = {
     "saturday": "Суббота ",
     "sunday": "Воскресенье "
 }
+
+# rewrite later to another file
+async def translateWeekday(weekday: str):
+    return WEEKDAYS[weekday]
 
 async def initNotificationsFile():
     file_path = STORAGE_DIR + "notifications.json"
@@ -67,6 +70,43 @@ async def fetchNotifications(username: str, weekday: str) -> list:
 
     return []
 
+async def setNotification(username: str, weekday: str, time: str):
+    time_to_set = {weekday: time}
+
+    print(time_to_set)
+
+    with open(STORAGE_DIR + "notifications.json", "r") as F:
+        total = json.load(F)
+
+        for i in total["users"]:
+            if i["username"] == username:
+                weekday_times = [
+                    time_dict
+                    for time_dict in i["times"]
+                ]
+
+        weekday_times.append(time_to_set)
+
+        print(weekday_times)
+        
+        seen = set()
+        final_times = []
+
+        for d in weekday_times:
+            t = tuple(d.items())
+
+            if t not in seen:
+                seen.add(t)
+                final_times.append(d)
+
+    with open(STORAGE_DIR + "notifications.json", "w") as F:
+        for i in total["users"]:
+            if i["username"] == username:
+                i["times"] = final_times
+        
+        json.dump(total, F, indent=4)
+
+
 async def buildNotificationsKeyboard(username: str) -> InlineKeyboardBuilder:
     SETUP_NOTIFICATIONS_MENU = InlineKeyboardBuilder()
 
@@ -86,3 +126,9 @@ async def buildNotificationsKeyboard(username: str) -> InlineKeyboardBuilder:
     SETUP_NOTIFICATIONS_MENU.row(InlineKeyboardButton(text="Вернуться в главное меню 🎽", callback_data="menus"))
 
     return SETUP_NOTIFICATIONS_MENU
+
+SET_TIME_MENU_LAYOUT = [[
+    InlineKeyboardButton(text="Назад ⏪", callback_data="notifications setup"),
+    InlineKeyboardButton(text="Меню 🌥️", callback_data="menus")
+]]
+SET_TIME_MENU = InlineKeyboardMarkup(inline_keyboard=SET_TIME_MENU_LAYOUT)
