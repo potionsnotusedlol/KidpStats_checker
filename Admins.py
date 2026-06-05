@@ -8,8 +8,20 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
 from Middlewares import RoleFilter, Role
 from StudentDataHandler import SDH, Request
-from KB import ADMIN_MAIN_MENU, RETURN_HOME, SET_TIME_MENU, fetchNotifications, buildNotificationsKeyboard, initNotificationsFile, translateWeekday, setNotification
+from KB import (
+    ADMIN_MAIN_MENU,
+    RETURN_HOME,
+    SET_TIME_MENU,
+    fetchNotifications,
+    buildNotificationsKeyboard,
+    initNotificationsFile,
+    translateWeekday,
+    setNotification,
+    loadAllUsers
+)
 from Config import config
+from datetime import datetime
+from asyncio import sleep
 
 import re
 
@@ -87,7 +99,7 @@ class SetTime(StatesGroup):
 async def setupNotifications(callback: CallbackQuery, bot: Bot, state: FSMContext):
     await callback.answer()
 
-    SETUP_NOTIFICATIONS_MENU = await buildNotificationsKeyboard(callback.from_user.username)
+    SETUP_NOTIFICATIONS_MENU = await buildNotificationsKeyboard(callback.from_user.username, callback.message.chat.id)
 
     await bot.edit_message_text(chat_id=callback.message.chat.id, message_id=callback.message.message_id, text="Выберите день для настройки сообщений", reply_markup=SETUP_NOTIFICATIONS_MENU.as_markup())
     await state.set_state(None)
@@ -96,7 +108,7 @@ async def setupNotifications(callback: CallbackQuery, bot: Bot, state: FSMContex
 async def selectDay(callback: CallbackQuery, bot: Bot, state: FSMContext):
     global day
     day = callback.data.split(" ")[1] # type: ignore
-    notifications = await fetchNotifications(callback.from_user.username, day) # type: ignore
+    notifications = await fetchNotifications(callback.from_user.username, callback.message.chat.id, day) # type: ignore
     answer_text = "Напишите время напоминания в формате *ЧЧ:ММ* для добавления/удаления напоминания\n\nВот уже установленные:\n"
 
     for notification in notifications:
@@ -116,10 +128,45 @@ async def getTime(msg: Message):
         else:
             global day
 
-            await msg.answer("Вы будете уведомлены в {} каждый {}".format(msg.text, await translateWeekday(day)), reply_markup=SET_TIME_MENU)
+            await msg.answer("Вы будете уведомлены в {}, {}".format(msg.text, await translateWeekday(day)), reply_markup=SET_TIME_MENU)
             await setNotification(msg.from_user.username, day, msg.text)
     else:
         await msg.answer("Неправильный формат: нужно _ЧЧ:ММ_", reply_markup=SET_TIME_MENU)
+
+async def sendNotification(bot: Bot, chat_id: int, message: str):
+    try:
+        chat = await bot.get_chat(chat_id)
+
+        await bot.send_message(chat_id=chat.id, text=message)
+    except Exception as e:
+        print(f"Scheduled task malfunction: {e}")
+
+async def notify(bot: Bot):
+    now = datetime.now()
+    curr_time = now.strftime("%H:%M")
+    curr_weekday = now.strftime("%A").lower()
+
+    for username, chat_id in loadAllUsers():
+        times = await fetchNotifications(username, chat_id, curr_weekday)
+
+        if curr_time in times:
+            print("notifying at", curr_weekday, curr_time, "for", username)
+
+            await sendNotification(bot, chat_id, "‼️Напоминаю обновить базу по результатам‼️")
+
+async def runScheduler(bot: Bot):
+    await sleep(25)
+
+    while True:
+        await notify(bot)
+
+        now = datetime.now()
+
+        print("schedule running {}:{}:{}".format(now.hour, now.minute, now.second))
+
+        delay = 60 - now.second
+
+        await sleep(delay)
 
 """{
     "users": [

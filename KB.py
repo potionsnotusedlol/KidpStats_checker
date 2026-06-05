@@ -39,11 +39,12 @@ async def initNotificationsFile():
 
             json.dump(total, F, indent=4)
 
-async def initUserNotifications(username: str):
+async def initUserNotifications(username: str, chat_id: int):
     with open(STORAGE_DIR + "notifications.json", "r") as F:
         content = json.load(F)
         new_data = {
             "username": username,
+            "chat_id": chat_id,
             "times": []
         }
 
@@ -52,7 +53,7 @@ async def initUserNotifications(username: str):
     with open(STORAGE_DIR + "notifications.json", "w") as F:
         json.dump(content, F, indent=4)
 
-async def fetchNotifications(username: str, weekday: str) -> list:
+async def fetchNotifications(username: str, chat_id: int, weekday: str) -> list:
     with open(STORAGE_DIR + "notifications.json", "r") as F:
         total = json.load(F)
 
@@ -66,9 +67,15 @@ async def fetchNotifications(username: str, weekday: str) -> list:
                 
                 return weekday_times
         
-    await initUserNotifications(username)
+    await initUserNotifications(username, chat_id)
 
     return []
+
+def loadAllUsers() -> list[tuple]:
+    with open(STORAGE_DIR + "notifications.json", "r") as F:
+        data = json.load(F)
+
+    return [(user["username"], user["chat_id"]) for user in data["users"]]
 
 async def setNotification(username: str, weekday: str, time: str):
     time_to_set = {weekday: time}
@@ -107,12 +114,12 @@ async def setNotification(username: str, weekday: str, time: str):
         json.dump(total, F, indent=4)
 
 
-async def buildNotificationsKeyboard(username: str) -> InlineKeyboardBuilder:
+async def buildNotificationsKeyboard(username: str, chat_id: int) -> InlineKeyboardBuilder:
     SETUP_NOTIFICATIONS_MENU = InlineKeyboardBuilder()
 
     for eng, rus in WEEKDAYS.items():
         cd = "selected " + eng
-        check = await fetchNotifications(username, eng)
+        check = await fetchNotifications(username, chat_id, eng)
 
         if check == []:
             txt = rus + "❌"
