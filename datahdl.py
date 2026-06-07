@@ -1,5 +1,5 @@
 from enum import IntEnum
-from Config import config
+from config import config
 from openpyxl import load_workbook
 
 import aiosqlite
@@ -11,7 +11,13 @@ INFO_FILE_PATH = config.STORAGE_FOLDER.get_secret_value() + config.INFO_FILENAME
 INFO_DB_PATH = config.STORAGE_FOLDER.get_secret_value() + config.INFO_DB_NAME.get_secret_value()
 
 # region DB handling
-async def getUsersDB():
+async def get_user_db() -> None:
+    """
+    Function to fetch roles usernames from DB. Creates one if no DB found.
+
+    :return: Returns :type:`None`, since the output not used in any other function.
+    """
+
     loop = asyncio.get_event_loop()
     workbook = await loop.run_in_executor(None, lambda: load_workbook(filename=ROLES_FILE_PATH, read_only=True))
     roles_file = workbook.active
@@ -48,10 +54,14 @@ async def getUsersDB():
 
         await role_database.commit()
 
-async def updateInfoFile():
-    pass
+async def fetch_info_file(filename: str) -> None:
+    """
+    Fetches info from .xlsx file into DB.
 
-async def fetchInfoFile(filename):
+    :param filname: Name of the file containing the information
+    :return: Returns :type:`None`, just translates info into DB.
+    """
+
     loop = asyncio.get_event_loop()
     wb = await loop.run_in_executor(None, lambda: load_workbook(filename, read_only=True))
 
@@ -111,17 +121,25 @@ async def fetchInfoFile(filename):
                 rows
             )
             await info_db.commit()
-
-
-
 # endregion
 
 class Request(IntEnum):
+    """
+    Requests for Info handling and module usage. Class to be more convenient.
+    """
+
     UPDATE_ROLES_DB = 0
     UPDATE_DATA_DB = 1
 
-async def SDH(request: Request):
+async def SDH(request: Request) -> None:
+    """
+    Delivers communications to this module from other program parts.
+
+    :param request: :class:`Request` option to tell the module what to do
+    :return: Returns :type:`None`, no output needed.
+    """
+
     if request == Request.UPDATE_ROLES_DB:
-        await getUsersDB()
+        await get_user_db()
     elif request == Request.UPDATE_DATA_DB:
         pass

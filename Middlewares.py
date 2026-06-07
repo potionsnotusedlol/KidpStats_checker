@@ -2,7 +2,7 @@ from collections.abc import Awaitable, Callable
 from typing import Any, Callable
 from aiogram import BaseMiddleware
 from aiogram.types import Message, TelegramObject
-from Config import config
+from config import config
 from enum import IntEnum
 from aiogram.filters import BaseFilter
 
@@ -11,13 +11,28 @@ import aiosqlite
 ROLES_DB_PATH = config.STORAGE_FOLDER.get_secret_value() + config.ROLES_DB_NAME.get_secret_value()
 
 class Role(IntEnum):
+    """
+    Role-level distribution object. Supports convenient multi-privilege filtering (:code:`<=>Role.[ROLE]`)
+    """
+
     GUEST = 0
     STUDENT = 1
     ADMIN = 2
     OWNER = 3
 
 class InitMiddleware(BaseMiddleware):
-    async def getUserRole(self, user_id) -> Role:
+    """
+    Middleware class to determine the user role for the chat. Works on every event
+    """
+
+    async def get_user_role(self, user_id) -> Role:
+        """
+        Fetch user's role from database or owner username value of :class:`config`.
+
+        :param user_id: String value of the username. Should match :code:`username`
+        :return: Returns :class:`Role` of the user, who the request is from
+        """
+
         if user_id == config.OWNER_USERNAME.get_secret_value():
             print("Got role for:", user_id, "-> OWNER")
 
@@ -51,14 +66,22 @@ class InitMiddleware(BaseMiddleware):
         return Role.GUEST
 
     async def __call__(self, handler: Callable[[TelegramObject, dict[str, Any]], Awaitable[Any]], event: TelegramObject, data: dict[str, Any]) -> Any: # type: ignore
+        """
+        Calling the middleware. Standard procedure for :code:`aiogram` integration.
+        """
+
         actual_event = data.get("event_from_user")
 
         if actual_event:
-            data["user_role"] = await self.getUserRole(actual_event.username)
+            data["user_role"] = await self.get_user_role(actual_event.username)
 
         return await handler(event, data)
     
 class RoleFilter(BaseFilter):
+    """
+    Class implementation for role filtering for routers.
+    """
+    
     def __init__(self, *roles: Role) -> None:
         self.roles = roles
 

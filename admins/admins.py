@@ -2,26 +2,22 @@ from aiogram import Router, Bot
 from aiogram.filters import Command, StateFilter
 from aiogram.types import Message, CallbackQuery, InputMediaPhoto, FSInputFile
 from aiogram.utils.formatting import Text
-from aiogram.methods.send_message import SendMessage
 from aiogram import F
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
-from Middlewares import RoleFilter, Role
-from StudentDataHandler import SDH, Request
-from KB import (
+from middlewares import RoleFilter, Role
+from keyboards import (
     ADMIN_MAIN_MENU,
     RETURN_HOME,
     SET_TIME_MENU,
-    fetchNotifications,
-    buildNotificationsKeyboard,
-    initNotificationsFile,
-    translateWeekday,
-    setNotification,
-    loadAllUsers
+    build_notifications_keyboard
 )
-from Config import config
-from datetime import datetime
-from asyncio import sleep
+from admins.notifications import (
+    init_notifications_file,
+    fetch_notifications,
+    translate_weekday,
+    set_notification
+)
 
 import re
 
@@ -60,32 +56,55 @@ _В случае ошибки, файл не будет принят._
 router = Router()
 day = ""
 router.message.filter(RoleFilter(Role.ADMIN, Role.OWNER))
-STORAGE_DIR=config.STORAGE_FOLDER.get_secret_value()
 
 @router.message(Command("start"))
-async def greet(msg: Message):
+async def greet(msg: Message) -> None:
+    """
+    Sends greeting message for admin-level (and above) users.
+
+    :param msg: :class:`Message` instance for a handler
+    :return: Returns :type:`None`, just answers the _/start_ message
+    """
+
     await msg.answer(**Text(GREETING).as_kwargs())
     await msg.answer(MAIN_MENU, reply_markup=ADMIN_MAIN_MENU)
-    await initNotificationsFile()
+    await init_notifications_file()
 
 @router.callback_query(F.data == "menus")
-async def returnHome(callback: CallbackQuery, bot: Bot, state: FSMContext):
+async def return_home(callback: CallbackQuery, bot: Bot, state: FSMContext) -> None:
+    """
+    Switches bot menu message and keyboard back to main menu.
+
+    :param callback: :class:`CallbackQuery`, from which comes the callback data (chat ID, message ID, etc.)
+    :param bot: :class:`Bot` instance to delete and re-send the message with different inline keyboard and text
+    :param state: :class:`FSMContext` to reset the state of the notification setup context
+    :return: Returns :type:`None`, just does single action
+    """
+
     await callback.answer()
-    await bot.delete_message(chat_id=callback.message.chat.id, message_id=callback.message.message_id)
-    await bot.send_message(chat_id=callback.message.chat.id, text=MAIN_MENU, reply_markup=ADMIN_MAIN_MENU)
+    await bot.delete_message(chat_id=callback.message.chat.id, message_id=callback.message.message_id) # type: ignore
+    await bot.send_message(chat_id=callback.message.chat.id, text=MAIN_MENU, reply_markup=ADMIN_MAIN_MENU) # type: ignore
     await state.set_state(None)
 
 @router.callback_query(F.data.startswith("update"))
-async def getUpdatedData(callback: CallbackQuery, bot: Bot):
+async def get_updated_data(callback: CallbackQuery, bot: Bot) -> None:
+    """
+    Handles the requests for data updates and directs their behavior.
+
+    :param callback: :class:`CallbackQuery`, from which comes the callback data (request, chat ID, message ID, etc.)
+    :param bot: :class:`Bot` instance for front-end work
+    :return: Returns :type:`None`, since not used anywhere else
+    """
+
     function = callback.data.split(" ")[1] # type: ignore
 
     if function == "users":
         await callback.answer(reply_markup=RETURN_HOME)
 
-        hint_pic = InputMediaPhoto(media=FSInputFile("message_media/users_table_struct.jpeg"))
+        hint_pic = InputMediaPhoto(media=FSInputFile("message_media/users_table_struct.jpeg"), caption=SEND_ROLES_HINT)
 
         await bot.edit_message_media(chat_id=callback.message.chat.id, message_id=callback.message.message_id, media=hint_pic, reply_markup=RETURN_HOME) # type: ignore
-        await bot.edit_message_text(chat_id=callback.message.chat.id, message_id=callback.message.message_id, text=SEND_ROLES_HINT)
+        # await bot.edit_message_text(chat_id=callback.message.chat.id, message_id=callback.message.message_id, text=SEND_ROLES_HINT) # type: ignore
         pass
     elif function == "DB":
         await callback.answer()
@@ -93,22 +112,45 @@ async def getUpdatedData(callback: CallbackQuery, bot: Bot):
         pass
 
 class SetTime(StatesGroup):
+    """
+    This object represents a FSM state to infinetly accept timestamps from users.
+    """
+
     entering_time = State()
+    """The entering state itself"""
 
 @router.callback_query(F.data == "notifications setup")
-async def setupNotifications(callback: CallbackQuery, bot: Bot, state: FSMContext):
+async def setup_notifications(callback: CallbackQuery, bot: Bot, state: FSMContext) -> None:
+    """
+    Displays a menu to chose the weekday for the notifications.
+
+    :param callback: :class:`CallbackQuery`, from which comes the callback data (chat ID, message ID, etc.)
+    :param bot: :class:`Bot` instance for all the front-end work
+    :param state: :class:`FSMContext` to reset the state of the notification setup context
+    :return: Returns :type:`None`, since not used anywhere else
+    """
+
     await callback.answer()
 
-    SETUP_NOTIFICATIONS_MENU = await buildNotificationsKeyboard(callback.from_user.username, callback.message.chat.id)
+    SETUP_NOTIFICATIONS_MENU = await build_notifications_keyboard(callback.from_user.username, callback.message.chat.id) # type: ignore
 
-    await bot.edit_message_text(chat_id=callback.message.chat.id, message_id=callback.message.message_id, text="Выберите день для настройки сообщений", reply_markup=SETUP_NOTIFICATIONS_MENU.as_markup())
+    await bot.edit_message_text(chat_id=callback.message.chat.id, message_id=callback.message.message_id, text="Выберите день для настройки сообщений", reply_markup=SETUP_NOTIFICATIONS_MENU.as_markup()) # type: ignore
     await state.set_state(None)
 
 @router.callback_query(F.data.startswith("selected"))
-async def selectDay(callback: CallbackQuery, bot: Bot, state: FSMContext):
+async def select_day(callback: CallbackQuery, bot: Bot, state: FSMContext) -> None:
+    """
+    Reacts to when the weekday was chosen.
+
+    :param callback: :class:`CallbackQuery`, from which comes the callback data (request, chat ID, message ID, etc.)
+    :param bot: :class:`Bot`for all the front-end work
+    :param state: :class:`FSMContext` to set the state an loop the input of the timestamps
+    :return: Returns :type:`None`, since not used anywhere else
+    """
+
     global day
     day = callback.data.split(" ")[1] # type: ignore
-    notifications = await fetchNotifications(callback.from_user.username, callback.message.chat.id, day) # type: ignore
+    notifications = await fetch_notifications(callback.from_user.username, callback.message.chat.id, day) # type: ignore
     answer_text = "Напишите время напоминания в формате *ЧЧ:ММ* для добавления/удаления напоминания\n\nВот уже установленные:\n"
 
     for notification in notifications:
@@ -119,54 +161,26 @@ async def selectDay(callback: CallbackQuery, bot: Bot, state: FSMContext):
     await state.set_state(SetTime.entering_time)
 
 @router.message(StateFilter(SetTime.entering_time))
-async def getTime(msg: Message):
+async def get_time(msg: Message) -> None:
+    """
+    Retrieves timestamps for user's messages.
+
+    :param msg: :class:`Message` instance to get info from, and answer to them
+    :return: Returns :type:`None`, since not used anywhere else
+    """
+
     if re.match("\d{2}:\d{2}", msg.text): # type: ignore
-        hrs, mins = msg.text.split(":")
+        hrs, mins = msg.text.split(":") # type: ignore
 
         if int(hrs) > 23 or int(mins) > 59:
             await msg.answer("Неправильный формат: нужно _ЧЧ:ММ_", reply_markup=SET_TIME_MENU)
         else:
             global day
 
-            await msg.answer("Вы будете уведомлены в {}, {}".format(msg.text, await translateWeekday(day)), reply_markup=SET_TIME_MENU)
-            await setNotification(msg.from_user.username, day, msg.text)
+            await msg.answer("Вы будете уведомлены в {}, {}".format(msg.text, await translate_weekday(day)), reply_markup=SET_TIME_MENU)
+            await set_notification(msg.from_user.username, day, msg.text) # type: ignore
     else:
         await msg.answer("Неправильный формат: нужно _ЧЧ:ММ_", reply_markup=SET_TIME_MENU)
-
-async def sendNotification(bot: Bot, chat_id: int, message: str):
-    try:
-        chat = await bot.get_chat(chat_id)
-
-        await bot.send_message(chat_id=chat.id, text=message)
-    except Exception as e:
-        print(f"Scheduled task malfunction: {e}")
-
-async def notify(bot: Bot):
-    now = datetime.now()
-    curr_time = now.strftime("%H:%M")
-    curr_weekday = now.strftime("%A").lower()
-
-    for username, chat_id in loadAllUsers():
-        times = await fetchNotifications(username, chat_id, curr_weekday)
-
-        if curr_time in times:
-            print("notifying at", curr_weekday, curr_time, "for", username)
-
-            await sendNotification(bot, chat_id, "‼️Напоминаю обновить базу по результатам‼️")
-
-async def runScheduler(bot: Bot):
-    await sleep(25)
-
-    while True:
-        await notify(bot)
-
-        now = datetime.now()
-
-        print("schedule running {}:{}:{}".format(now.hour, now.minute, now.second))
-
-        delay = 60 - now.second
-
-        await sleep(delay)
 
 """{
     "users": [

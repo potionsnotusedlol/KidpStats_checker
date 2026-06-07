@@ -1,16 +1,17 @@
 import asyncio
 import logging
-import Admins
-import Students
-import Guests
+import admins.admins as Admins
+import students
+import guests
 
 from aiogram import Bot, Dispatcher
 from aiogram.enums.parse_mode import ParseMode
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.client import default
-from Config import config
-from Middlewares import InitMiddleware
-from StudentDataHandler import getUsersDB
+from config import config
+from middlewares import InitMiddleware
+from datahdl import get_user_db
+from admins.notifications import run_scheduler
 
 pm_options = { ParseMode.MARKDOWN_V2: "MARKDOWN_V2" }
 
@@ -19,10 +20,10 @@ async def main():
     dp = Dispatcher(storage=MemoryStorage())
     dp.update.outer_middleware(InitMiddleware())
     dp.callback_query.middleware(InitMiddleware())
-    dp.include_routers(Admins.router, Students.router, Guests.router)
+    dp.include_routers(Admins.router, students.router, guests.router)
 
-    asyncio.create_task(Admins.runScheduler(bot))
-    await getUsersDB()
+    asyncio.create_task(run_scheduler(bot))
+    await get_user_db()
     await bot.delete_webhook(drop_pending_updates=True)
     await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
 
