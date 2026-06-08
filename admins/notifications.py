@@ -145,6 +145,35 @@ async def set_notification(username: str, weekday: str, time: str) -> None:
 
         json.dump(total, F, indent=4)
 
+async def remove_notification(username: str, weekday: str, time: str) -> None:
+    """
+    Removes a timestamp from the .json file.
+
+    :param username: Telegram username in the format :code:`username`
+    :param weekday: Day of the week to assign to, strictly standardized
+    :param time: :type:`str` value of a timestamp in the format :code:`HH:MM`
+    :return: Returns :type:`None`, no output from the function
+    """
+
+    with open(FILE_PATH, "r") as F:
+        total = json.load(F)
+
+        for i in total["users"]:
+            if i["username"] == username:
+                weekday_times = [
+                    time_dict
+                    for time_dict in i["times"]
+                ]
+
+        weekday_times.remove({weekday: time})
+
+    with open(FILE_PATH, "w") as F:
+        for i in total["users"]:
+            if i["username"] == username:
+                i["times"] = weekday_times
+
+        json.dump(total, F, indent=4)
+
 async def send_notification(bot: Bot, chat_id: int, message: str) -> None:
     """
     Handle the bot seding one scheduled message.

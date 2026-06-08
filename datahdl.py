@@ -1,6 +1,7 @@
 from enum import IntEnum
 from config import config
 from openpyxl import load_workbook
+from datetime import date
 
 import aiosqlite
 import asyncio
@@ -9,11 +10,12 @@ ROLES_FILE_PATH = config.STORAGE_FOLDER.get_secret_value() + config.ROLES_FILENA
 ROLES_DB_PATH = config.STORAGE_FOLDER.get_secret_value() + config.ROLES_DB_NAME.get_secret_value()
 INFO_FILE_PATH = config.STORAGE_FOLDER.get_secret_value() + config.INFO_FILENAME.get_secret_value()
 INFO_DB_PATH = config.STORAGE_FOLDER.get_secret_value() + config.INFO_DB_NAME.get_secret_value()
+MAX_HISTORICAL_STORE = 10
 
 # region DB handling
 async def get_user_db() -> None:
     """
-    Function to fetch roles usernames from DB. Creates one if no DB found.
+    Function to fetch roles usernames to and from DB. Creates one if no DB found.
 
     :return: Returns :type:`None`, since the output not used in any other function.
     """
@@ -72,7 +74,7 @@ async def fetch_info_file(filename: str) -> None:
         async with aiosqlite.connect(INFO_DB_PATH) as info_db:
             await info_db.execute(
                 """
-                    CREATE TABLE IF NOT EXISTS {}(
+                    CREATE TABLE IF NOT EXISTS {} (
                         student_fullname TEXT PRIMARY KEY,
                         pptx TEXT,
                         docx TEXT,
@@ -121,6 +123,42 @@ async def fetch_info_file(filename: str) -> None:
                 rows
             )
             await info_db.commit()
+
+async def cleanup_data_DB() -> None:
+    """
+    Function to regulate maximum amount of historical records for main DB.
+
+    :return: Returns :type:`None`, since the action is atomic.
+    """
+
+    async with aiosqlite.connect(INFO_DB_PATH) as info_db:
+        async with info_db.execute(
+            """
+                SELECT COUNT(*)
+                FROM sqlite_master
+                WHERE type='table'
+            """
+        ) as cursor:
+            count = await cursor.fetchone()
+
+        if not count or count <= MAX_HISTORICAL_STORE * 6:
+            return
+        else:
+            # pattern = re.compile(rf"^_\d{{4}}_\d{{2}}_\d{{2}}_$")
+
+            async with info_db.execute(
+                """
+                    SELECT *
+                    FROM sqlite_master
+                    WHERE type='table'
+                """
+            ) as cursor:
+                db_names = await cursor.fetchall()
+                dates_str = set([str(name[1:11]) for name in db_names])
+                dates = list()
+
+                for date_str in dates_str:
+                    dates.append(date(int(x[0]), int(x[2]), int(x[1])) for x in date_str.split("_"))
 # endregion
 
 class Request(IntEnum):
@@ -131,15 +169,16 @@ class Request(IntEnum):
     UPDATE_ROLES_DB = 0
     UPDATE_DATA_DB = 1
 
-async def SDH(request: Request) -> None:
+async def SDH(request: Request, filename: str | None = None) -> None:
     """
     Delivers communications to this module from other program parts.
 
     :param request: :class:`Request` option to tell the module what to do
+    :param filename: Optional :type:`str` for functions that require passing :code:`filename` as an argument
     :return: Returns :type:`None`, no output needed.
     """
 
     if request == Request.UPDATE_ROLES_DB:
         await get_user_db()
     elif request == Request.UPDATE_DATA_DB:
-        pass
+        await fetch_info_file(filename) # type: ignore

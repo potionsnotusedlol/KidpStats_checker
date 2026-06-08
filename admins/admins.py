@@ -16,8 +16,11 @@ from admins.notifications import (
     init_notifications_file,
     fetch_notifications,
     translate_weekday,
-    set_notification
+    set_notification,
+    remove_notification
 )
+from datahdl import SDH, Request
+from config import config
 
 import re
 
@@ -47,7 +50,7 @@ _Структура содержания_
 В таблице предусмотрено 25 столбцов (Студент, Презентация (PPTX), ..., Руководитель, Консультант).
 Первая строка, как обычно, шапка.
 
-⚠️‼️*_ОБРАТИТЕ ВНИМАНИЕ НА ФОРМАТ ИМЕНИ_*‼️
+⚠️‼️*ОБРАТИТЕ ВНИМАНИЕ НА ФОРМАТ ИМЕНИ*‼️
 "kidp\_stats\_one\_excel\_ГГГГ-ММ-ДД.xlsx"
 _Пока программа не предусматривает "умный" парсинг имени._
 _В случае ошибки, файл не будет принят._
@@ -86,13 +89,24 @@ async def return_home(callback: CallbackQuery, bot: Bot, state: FSMContext) -> N
     await bot.send_message(chat_id=callback.message.chat.id, text=MAIN_MENU, reply_markup=ADMIN_MAIN_MENU) # type: ignore
     await state.set_state(None)
 
+class WaitForInput(StatesGroup):
+    """
+    This object represents a FSM state to infinetly accept some user's messages, until requirements met, or turned off.
+    """
+
+    entering_time = State()
+    get_users_file = State()
+    get_DB_file = State()
+    """The entering state itself"""
+
 @router.callback_query(F.data.startswith("update"))
-async def get_updated_data(callback: CallbackQuery, bot: Bot) -> None:
+async def get_updated_data(callback: CallbackQuery, bot: Bot, state: FSMContext) -> None:
     """
     Handles the requests for data updates and directs their behavior.
 
     :param callback: :class:`CallbackQuery`, from which comes the callback data (request, chat ID, message ID, etc.)
     :param bot: :class:`Bot` instance for front-end work
+    :param state: :class:`FSMContext` for reading/changing the FSM state of the router.
     :return: Returns :type:`None`, since not used anywhere else
     """
 
@@ -104,20 +118,62 @@ async def get_updated_data(callback: CallbackQuery, bot: Bot) -> None:
         hint_pic = InputMediaPhoto(media=FSInputFile("message_media/users_table_struct.jpeg"), caption=SEND_ROLES_HINT)
 
         await bot.edit_message_media(chat_id=callback.message.chat.id, message_id=callback.message.message_id, media=hint_pic, reply_markup=RETURN_HOME) # type: ignore
-        # await bot.edit_message_text(chat_id=callback.message.chat.id, message_id=callback.message.message_id, text=SEND_ROLES_HINT) # type: ignore
-        pass
+        await state.set_state(WaitForInput.get_users_file)
     elif function == "DB":
         await callback.answer()
         await bot.edit_message_text(chat_id=callback.message.chat.id, message_id=callback.message.message_id, text=SEND_INFO_HINT, reply_markup=RETURN_HOME) # type: ignore
-        pass
+        await state.set_state(WaitForInput.get_DB_file)
 
-class SetTime(StatesGroup):
+@router.message(StateFilter(WaitForInput.get_users_file))
+async def get_users_file(msg: Message, state: FSMContext, bot: Bot) -> None:
     """
-    This object represents a FSM state to infinetly accept timestamps from users.
+    Downloads the file containing users' roles. Or turns them around.
+
+    :param msg: :class:`Message` that the user sent
+    :param state: :class:`FSMContext` for reading/changing the FSM state of the router
+    :param bot: :class:`Bot` instance for file handling
+    :return: Returns :type:`None`, since no output produced.
     """
 
-    entering_time = State()
-    """The entering state itself"""
+    if msg.content_type == "document":
+        if not msg.document.file_name.endswith(".xlsx"): # type: ignore
+            await msg.answer("Пожалуйста, отправьте ещё раз. Файл должен быть `.xlsx`")
+        else:
+            file = await bot.get_file(msg.document.file_id) # type: ignore
+
+            await bot.download_file(file.file_path, config.STORAGE_FOLDER.get_secret_value() + "tgnames.xlsx") # type: ignore
+            await state.set_state(None)
+            await msg.answer("Отлично, обновляю доступ...")
+            await SDH(Request.UPDATE_ROLES_DB)
+            await msg.answer(MAIN_MENU, reply_markup=ADMIN_MAIN_MENU)
+            await state.set_state(None)
+    else:
+        await msg.answer("Пожалуйста, отправьте ещё раз. Файл должен быть `.xlsx.")
+
+@router.message(StateFilter(WaitForInput.get_DB_file))
+async def get_DB_file(msg: Message, state: FSMContext, bot: Bot) -> None:
+    """
+    Downloads the file containing students' stats. Or turns them around.
+
+    :param msg: :class:`Message` that the user sent
+    :param state: :class:`FSMContext` for reading/changing the FSM state of the router
+    :param bot: :class:`Bot` instance for file handling
+    :return: Returns :type:`None`, since no output produced.
+    """
+
+    if msg.content_type == "document":
+        if not re.match("kidp\_stats\_one\_excel\_\d{4}-\d{2}-\d{2}.xlsx", msg.document.file_name): # type: ignore
+            await msg.answer("Пожалуйста, отправьте ещё раз. Файл должен быть `.xlsx`")
+        else:
+            file = await bot.get_file(msg.document.file_id) # type: ignore
+
+            await bot.download_file(file.file_path, config.STORAGE_FOLDER.get_secret_value() + msg.document.file_name) # type: ignore
+            await msg.answer("Отлично! База обновлена.")
+            await SDH(Request.UPDATE_DATA_DB, config.STORAGE_FOLDER.get_secret_value() + msg.document.file_name) # type: ignore
+            await msg.answer(MAIN_MENU, reply_markup=ADMIN_MAIN_MENU)
+            await state.set_state(None)
+    else:
+        await msg.answer("Пожалуйста, отправьте ещё раз. Файл должен быть `.xlsx` и называться по шаблону _kidp\_stats\_one\_excel\_ГГГГ-ММ-ДД.xlsx_")
 
 @router.callback_query(F.data == "notifications setup")
 async def setup_notifications(callback: CallbackQuery, bot: Bot, state: FSMContext) -> None:
@@ -157,10 +213,10 @@ async def select_day(callback: CallbackQuery, bot: Bot, state: FSMContext) -> No
         answer_text += (notification + "\n")
 
     await callback.answer()
-    await bot.edit_message_text(chat_id=callback.message.chat.id, message_id=callback.message.message_id, text=answer_text, reply_markup=SET_TIME_MENU)
-    await state.set_state(SetTime.entering_time)
+    await bot.edit_message_text(chat_id=callback.message.chat.id, message_id=callback.message.message_id, text=answer_text, reply_markup=SET_TIME_MENU) # type: ignore
+    await state.set_state(WaitForInput.entering_time)
 
-@router.message(StateFilter(SetTime.entering_time))
+@router.message(StateFilter(WaitForInput.entering_time))
 async def get_time(msg: Message) -> None:
     """
     Retrieves timestamps for user's messages.
@@ -177,8 +233,14 @@ async def get_time(msg: Message) -> None:
         else:
             global day
 
-            await msg.answer("Вы будете уведомлены в {}, {}".format(msg.text, await translate_weekday(day)), reply_markup=SET_TIME_MENU)
-            await set_notification(msg.from_user.username, day, msg.text) # type: ignore
+            notifications = await fetch_notifications(msg.from_user.username, msg.chat.id, day) # type: ignore
+
+            if msg.text in notifications:
+                await remove_notification(msg.from_user.username, day, msg.text) # type: ignore
+                await msg.answer("Больше не буду уведомлять в {}, {}".format(msg.text, await translate_weekday(day)), reply_markup=SET_TIME_MENU)
+            else:
+                await msg.answer("Вы будете уведомлены в {}, {}".format(msg.text, await translate_weekday(day)), reply_markup=SET_TIME_MENU)
+                await set_notification(msg.from_user.username, day, msg.text) # type: ignore
     else:
         await msg.answer("Неправильный формат: нужно _ЧЧ:ММ_", reply_markup=SET_TIME_MENU)
 
