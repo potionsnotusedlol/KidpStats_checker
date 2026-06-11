@@ -1,15 +1,16 @@
 from enum import IntEnum
 from config import config
 from openpyxl import load_workbook
-from datetime import date
 
+import datetime
 import aiosqlite
 import asyncio
+import os
 
-ROLES_FILE_PATH = config.STORAGE_FOLDER.get_secret_value() + config.ROLES_FILENAME.get_secret_value()
-ROLES_DB_PATH = config.STORAGE_FOLDER.get_secret_value() + config.ROLES_DB_NAME.get_secret_value()
-INFO_FILE_PATH = config.STORAGE_FOLDER.get_secret_value() + config.INFO_FILENAME.get_secret_value()
-INFO_DB_PATH = config.STORAGE_FOLDER.get_secret_value() + config.INFO_DB_NAME.get_secret_value()
+STORAGE_DIR = config.STORAGE_FOLDER.get_secret_value()
+ROLES_FILE_PATH = STORAGE_DIR + config.ROLES_FILENAME.get_secret_value()
+ROLES_DB_PATH = STORAGE_DIR + config.ROLES_DB_NAME.get_secret_value()
+INFO_DB_PATH = STORAGE_DIR + config.INFO_DB_NAME.get_secret_value()
 MAX_HISTORICAL_STORE = 10
 
 # region DB handling
@@ -34,7 +35,7 @@ async def get_user_db() -> None:
             continue
 
         rows.append((str(telegram_id).strip("@"), str(fullname).strip()))
-    
+
     workbook.close()
 
     async with aiosqlite.connect(ROLES_DB_PATH) as role_database:
@@ -65,16 +66,18 @@ async def fetch_info_file(filename: str) -> None:
     """
 
     loop = asyncio.get_event_loop()
-    wb = await loop.run_in_executor(None, lambda: load_workbook(filename, read_only=True))
+    wb = await loop.run_in_executor(None, lambda: load_workbook(STORAGE_DIR + filename, read_only=True))
 
     for sheet in wb.worksheets:
-        table_name = filename[50:-5] + "_" + sheet.title # change the filename's slice later
-        table_name = table_name.replace("-", "_")
+        table_name = filename[21:-5] + "_" + sheet.title # change the filename's slice later
+        table_name = "_" + table_name.replace("-", "_")
+
+        print(table_name)
 
         async with aiosqlite.connect(INFO_DB_PATH) as info_db:
             await info_db.execute(
-                """
-                    CREATE TABLE IF NOT EXISTS {} (
+                f"""
+                    CREATE TABLE IF NOT EXISTS {table_name} (
                         student_fullname TEXT PRIMARY KEY,
                         pptx TEXT,
                         docx TEXT,
@@ -101,7 +104,7 @@ async def fetch_info_file(filename: str) -> None:
                         supervisor TEXT,
                         consultant TEXT
                     )
-                """.format(table_name),
+                """
             )
             await info_db.commit()
         
@@ -123,6 +126,41 @@ async def fetch_info_file(filename: str) -> None:
                 rows
             )
             await info_db.commit()
+
+async def autofetch_dir(dir: str) -> None:
+    """
+    Fetches all the files matching the maximal historical count when the bot initiates.
+
+    :param dir: Storage directory name
+    :return: Returns :type:`None`, since no output data is being produced.
+    """
+
+    dates = list()
+
+    with os.scandir(dir) as contents:
+        for entry in contents:
+            if entry.is_file():
+                filename = entry.path.split("/")[1]
+
+                if filename.startswith("kidp_stats_one_excel_"):
+                    dates.append(filename[21:-5])
+
+    dates_to_fetch = list()
+
+    if len(dates) > MAX_HISTORICAL_STORE:
+        for i in dates:
+            date_format = i.split("-")
+
+            dates_to_fetch.append(datetime.date(int(date_format[0]), int(date_format[1]), int(date_format[2])))
+
+        dates_to_fetch.sort()
+        dates_to_fetch = dates_to_fetch[-MAX_HISTORICAL_STORE:]
+
+        for date in dates_to_fetch:
+            await fetch_info_file("kidp_stats_one_excel_" + str(date) + ".xlsx")
+    else:
+        for date in dates:
+            await fetch_info_file("kidp_stats_one_excel_" + date + ".xlsx")
 
 async def cleanup_data_DB() -> None:
     """

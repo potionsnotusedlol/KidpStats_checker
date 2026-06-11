@@ -13,7 +13,6 @@ class Settings(BaseSettings):
     ROLES_DB_NAME: SecretStr
     ROLES_FILENAME: SecretStr
     INFO_DB_NAME: SecretStr
-    INFO_FILENAME: SecretStr
     STORAGE_FOLDER: SecretStr
     OWNER_USERNAME: SecretStr
     

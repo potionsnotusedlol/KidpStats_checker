@@ -169,7 +169,7 @@ async def get_DB_file(msg: Message, state: FSMContext, bot: Bot) -> None:
 
             await bot.download_file(file.file_path, config.STORAGE_FOLDER.get_secret_value() + msg.document.file_name) # type: ignore
             await msg.answer("Отлично! База обновлена.")
-            await SDH(Request.UPDATE_DATA_DB, config.STORAGE_FOLDER.get_secret_value() + msg.document.file_name) # type: ignore
+            await SDH(Request.UPDATE_DATA_DB, msg.document.file_name) # type: ignore
             await msg.answer(MAIN_MENU, reply_markup=ADMIN_MAIN_MENU)
             await state.set_state(None)
     else:
