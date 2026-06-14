@@ -113,8 +113,6 @@ async def set_notification(username: str, weekday: str, time: str) -> None:
 
     time_to_set = {weekday: time}
 
-    print(time_to_set)
-
     with open(FILE_PATH, "r") as F:
         total = json.load(F)
 
@@ -126,7 +124,6 @@ async def set_notification(username: str, weekday: str, time: str) -> None:
                 ]
 
         weekday_times.append(time_to_set)
-        print(weekday_times)
 
         seen = set()
         final_times = []
@@ -225,9 +222,6 @@ async def run_scheduler(bot: Bot) -> None:
         await notify(bot)
 
         now = datetime.now()
-
-        print(f"Schedule running {now.hour}:{now.minute}:{now.second}")
-
         delay = 60 - now.second
 
         await sleep(delay)

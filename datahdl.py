@@ -189,8 +189,6 @@ async def cleanup_data_DB() -> None:
         ) as cursor:
             count = await cursor.fetchone()
 
-        print(count)
-
         if not count or count[0] <= MAX_HISTORICAL_STORE * 6:
             return
         else:
@@ -208,14 +206,9 @@ async def cleanup_data_DB() -> None:
                 dates = list()
 
                 for name in db_names:
-                    print(name)
-
                     dates.append(await get_date_from_DB_name(name))
                 
             dates_to_keep = sorted(dates)
-
-            print(dates)
-
             dates_to_keep = dates_to_keep[-MAX_HISTORICAL_STORE * 6:]
 
             for db_name in db_names:
