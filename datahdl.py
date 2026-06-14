@@ -66,13 +66,11 @@ async def fetch_info_file(filename: str) -> None:
     """
 
     loop = asyncio.get_event_loop()
-    wb = await loop.run_in_executor(None, lambda: load_workbook(STORAGE_DIR + filename, read_only=True))
+    wb = await loop.run_in_executor(None, lambda: load_workbook(STORAGE_DIR+filename, read_only=True))
 
     for sheet in wb.worksheets:
         table_name = filename[21:-5] + "_" + sheet.title # change the filename's slice later
         table_name = "_" + table_name.replace("-", "_")
-
-        print(table_name)
 
         async with aiosqlite.connect(INFO_DB_PATH) as info_db:
             await info_db.execute(
@@ -160,7 +158,19 @@ async def autofetch_dir(dir: str) -> None:
             await fetch_info_file("kidp_stats_one_excel_" + str(date) + ".xlsx")
     else:
         for date in dates:
-            await fetch_info_file("kidp_stats_one_excel_" + date + ".xlsx")
+            await fetch_info_file("kidp_stats_one_excel_" + str(date) + ".xlsx")
+
+async def get_date_from_DB_name(name: str) -> datetime.date:
+    """
+    Gets date in a standardized format for more convenient operation.
+
+    :param name: The name of a DB
+    :return: Returns :class:`datetime.date` value extracted from DB's name.
+    """
+
+    year, month, day = name[1:11].split("_")
+
+    return datetime.date(int(year), int(month), int(day))
 
 async def cleanup_data_DB() -> None:
     """
@@ -179,7 +189,9 @@ async def cleanup_data_DB() -> None:
         ) as cursor:
             count = await cursor.fetchone()
 
-        if not count or count <= MAX_HISTORICAL_STORE * 6:
+        print(count)
+
+        if not count or count[0] <= MAX_HISTORICAL_STORE * 6:
             return
         else:
             # pattern = re.compile(rf"^_\d{{4}}_\d{{2}}_\d{{2}}_$")
@@ -192,11 +204,31 @@ async def cleanup_data_DB() -> None:
                 """
             ) as cursor:
                 db_names = await cursor.fetchall()
-                dates_str = set([str(name[1:11]) for name in db_names])
+                db_names = set(str(name[1]) for name in db_names)
                 dates = list()
 
-                for date_str in dates_str:
-                    dates.append(date(int(x[0]), int(x[2]), int(x[1])) for x in date_str.split("_"))
+                for name in db_names:
+                    print(name)
+
+                    dates.append(await get_date_from_DB_name(name))
+                
+            dates_to_keep = sorted(dates)
+
+            print(dates)
+
+            dates_to_keep = dates_to_keep[-MAX_HISTORICAL_STORE * 6:]
+
+            for db_name in db_names:
+                date_assigned = await get_date_from_DB_name(db_name)
+
+                if date_assigned not in dates_to_keep:
+                    await info_db.execute(
+                        f"""
+                            DROP TABLE {db_name}
+                        """
+                    )
+
+            await info_db.commit()
 # endregion
 
 class Request(IntEnum):
@@ -220,3 +252,4 @@ async def SDH(request: Request, filename: str | None = None) -> None:
         await get_user_db()
     elif request == Request.UPDATE_DATA_DB:
         await fetch_info_file(filename) # type: ignore
+        await cleanup_data_DB()
